@@ -1,0 +1,43 @@
+{
+  "name": "outpost",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first notes PWA with a real sync engine: outbox pattern, idempotent mutations, conflict resolution.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "app",
+    "server"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev -w @outpost/server",
+    "dev:web": "npm run dev -w @outpost/app",
+    "build": "npm run build -w @outpost/server && npm run build -w @outpost/app",
+    "preview": "npm run preview -w @outpost/app",
+    "icons": "node tools/generate-icons.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:watch": "npm run test:watch -w @outpost/app",
+    "e2e": "npm run build && npm run e2e -w @outpost/app",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down -v"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.5",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.9",
+    "typescript-eslint": "^8.70.1"
+  }
+}
