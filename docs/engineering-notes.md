@@ -1,16 +1,13 @@
 # Engineering notes
 
-Six bugs that only appeared when the thing was actually run, and what they taught
-me — plus an interlude about a suite that was fragile for a different reason.
-Every entry has the symptom, the evidence that found it, the cause, the fix and
-the test that now prevents it.
-
-This is the part of the project I would talk about in an interview, because none of
-it is visible in a feature list.
+Five bugs that only showed up when this was actually run rather than when it was read,
+plus one test suite that was fragile for a different reason. Every entry has the same
+shape: what it looked like, how it was found, what caused it, and the test that keeps
+it away.
 
 ---
 
-## 1. The shipped server could not start (and every unit test was green)
+## 1. The built server could not start
 
 **Symptom.** `npm test` green, `npm run dev` fine, but the end-to-end suite died
 before the first test: `Process from config.webServer was not able to start`.
@@ -47,7 +44,7 @@ import the TypeScript source, not the artefact. _Test the thing you ship._
 
 ---
 
-## 2. "Listening on localhost" is not "listening on 127.0.0.1"
+## 2. The preview server bound to IPv6 and the health check probed IPv4
 
 **Symptom.** Playwright: `Timed out waiting 60000ms from config.webServer`, with no
 other error. The dev API was healthy on the same port.
@@ -77,7 +74,7 @@ preview server is unreachable on IPv4. Worth knowing for any container health ch
 
 ---
 
-## 3. The editor ate the first keystrokes — and the logs named the culprit
+## 3. The editor ate the first keystrokes
 
 **Symptom.** A screenshot script that created three notes ended up with titles
 attached to the _wrong_ notes: the first note went back to "Untitled note", the
@@ -118,7 +115,7 @@ mutation lifecycle (`app/src/lib/debug.ts`).
 
 ---
 
-## 4. The badge said "Synced" while a change was stuck in retry
+## 4. The badge said Synced while a change was stuck in retry
 
 **Symptom.** A flaky unit test: after a failed push, the engine sometimes reported
 `phase: 'idle', failures: 0` while the mutation was still in the outbox.
@@ -143,7 +140,7 @@ failure, and that a retry that succeeds clears both.
 
 ---
 
-## 5. Interlude: the test suite was time-fragile
+## 5. The suite failed once in thirty runs
 
 Not a product bug, but a design mistake worth writing down. UI tests here drive
 several interactions against a real IndexedDB (via `fake-indexeddb`), which on a
@@ -219,59 +216,15 @@ somebody else's code, so it needs its own tests._
 
 ---
 
-## 7. The GIF encoder's code width grew one code too early
+## What they have in common
 
-**Symptom.** `node --test tools/lib/gif.test.mjs` failed on the one test that
-matters: the round trip in which a second, independently written decoder reads the
-encoder's own bytes back. Five of six tests passed.
+Three of the five were invisible to the unit suite, because it imports the source
+rather than what is shipped: a bundle, a real socket, a rendering lifecycle. A fourth
+turned up inside a unit test that reported something else entirely, and the fifth hid
+behind a test double that had drifted from the server it stands in for. None of them
+is visible in a feature list.
 
-**How it was found.** A failing round trip proves that two implementations
-disagree, not which one is wrong, so the file went to a decoder that shares no
-code with either of them — Chromium, through a canvas. The probe bitmap (flat
-bands plus a checkerboard, chosen so that corruption cannot look like noise) came
-back **99.9% wrong pixels**, worst channel error 251 of 255. The encoder was the
-one that lied.
-
-**Cause.** GIF's LZW grows its code width as the table fills, and the two sides do
-not count at the same moment: a decoder only learns an entry when it reads the
-_next_ code, so its table is always one code behind the encoder's. Growing on
-`nextCode === 1 << codeSize` writes the first wider code while the decoder is still
-reading the old width — and every code after that is misaligned.
-
-**Fix.** Count from the decoder's side, and handle the 12-bit ceiling explicitly
-(4095 is the last legal code):
-
-```ts
-if (codeSize === 12) {
-  if (nextCode === 1 << 12) {
-    emit(clearCode);
-    resetDictionary();
-  }
-} else if (nextCode - 1 === 1 << codeSize) {
-  codeSize += 1;
-}
-```
-
-**Why it cannot come back.** Those tests now run in CI (`npm run test:tools`), so
-the encoder can no longer rot in an unreferenced file, and they were checked
-against a real decoder: the probe comes back pixel-exact in Chromium, and so does
-a 512×512, 256-colour image — the size that crosses the 12-bit ceiling and forces
-a Clear code, a path no unit test reached. The probe itself stayed in the repo
-(`tools/gif-probe.mjs`, `npm run probe:gif`), because a claim about an encoder is
-only worth something if somebody else can reproduce it.
-
----
-
-## The pattern
-
-1. **Reproduce where it actually runs.** Four of the six were invisible to the unit
-   suite — a bundler artefact, a real socket, an event loop and a rendering
-   lifecycle. The other two were only found by asking something _outside_ the repo
-   for an opinion: a decoder that shares no code with ours, and a loop that ran the
-   flaky scenario thirty times instead of retrying it once.
-2. **Add a log that answers the question you are asking**, then delete it — or, if it
-   was useful, promote it into the product.
-3. **Fix the design, not the timing.** Every wait I shortened made the _test_ pass;
-   every wait I deleted made the _code_ correct.
-4. **Leave a test that fails for the old behaviour.** A bug you cannot reproduce in a
-   test is a bug you will meet again.
+Two habits come out of all six write-ups. Add a log that answers the question you are
+asking, then delete it, or promote it into the product if it turned out to be useful.
+And prefer fixing the design over adjusting the timing: every wait I shortened made
+the test pass, every wait I deleted made the code correct.
