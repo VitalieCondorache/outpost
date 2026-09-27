@@ -104,9 +104,33 @@ export function createFakeServer(options: FakeServerOptions = {}): FakeServer {
       };
     }
 
+    if (mutation.kind === 'delete' && existing && existing.deletedAt !== null) {
+      // Trashing a note that is already in the trash is a no-op, not a new
+      // revision — same rule and same message as `server/src/db.ts`.
+      applied.add(mutation.id);
+      return {
+        id: mutation.id,
+        status: 'applied',
+        duplicate: true,
+        rev: existing.rev,
+        server: strip(existing),
+        message: 'note was already in the trash',
+      };
+    }
+
     const rev = baseRev + 1;
     const updatedAt = nextTimestamp();
     const payload = mutation.payload;
+
+    // Tombstone handling, mirroring `server/src/db.ts`: an explicit `deletedAt`
+    // in the payload wins (that is how a restore clears the tombstone), otherwise
+    // the previous state is kept. `null` is a value, not a missing field — reading
+    // it as "absent" keeps a tombstone through a restore, which the real server
+    // does not do.
+    const deletedAt =
+      mutation.kind === 'create' || payload?.deletedAt === null
+        ? null
+        : (payload?.deletedAt ?? existing?.deletedAt ?? null);
 
     const next: StoredNote =
       mutation.kind === 'delete' && existing
@@ -117,7 +141,7 @@ export function createFakeServer(options: FakeServerOptions = {}): FakeServer {
             body: payload?.body ?? '',
             tags: payload?.tags ?? [],
             pinned: payload?.pinned ?? false,
-            deletedAt: payload?.deletedAt ?? existing?.deletedAt ?? null,
+            deletedAt,
             rev,
             updatedAt,
             seq: nextSeq(),

@@ -107,6 +107,26 @@ describe('offline first', () => {
     expect(outpost.getSnapshot().notes[0]?.deletedAt).not.toBeNull();
     expect(outpost.getSyncSnapshot().pending).toBe(0);
   });
+
+  it('clears a tombstone that was pushed before the note was restored', async () => {
+    const note = await outpost.createNote({ title: 'Temporary' });
+    await settle();
+
+    // Let the *delete* reach the server on its own. The restore below is then a
+    // second, chained write instead of an edit coalesced into the same mutation —
+    // the interleaving in which a restore used to come back from the server still
+    // carrying its tombstone, leaving the note stuck in the trash.
+    await outpost.trashNote(note.id);
+    await settle();
+    expect(serverNote()?.deletedAt).not.toBeNull();
+
+    await outpost.restoreNote(note.id);
+    await settle();
+
+    expect(serverNote()?.deletedAt).toBeNull();
+    expect(outpost.getSnapshot().notes[0]?.deletedAt).toBeNull();
+    expect(outpost.getSyncSnapshot()).toMatchObject({ phase: 'idle', pending: 0 });
+  });
 });
 
 describe('failure handling', () => {
