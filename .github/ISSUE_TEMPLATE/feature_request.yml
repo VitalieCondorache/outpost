@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a change or an addition.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests are fine, but have a look at the roadmap in the README
+        first — the roadmap items already have a shape in mind.
+        Anything that changes the sync protocol or its invariants needs an ADR.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you are hitting
+      description: Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How you would solve it
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Sync engine
+        - PWA / offline behaviour
+        - Editor or note list
+        - Conflict resolution
+        - API or storage
+        - Documentation / DX
+    validations:
+      required: true

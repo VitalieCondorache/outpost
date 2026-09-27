@@ -1,14 +1,32 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Note } from '@outpost/shared';
 import { App } from './App';
 import { deleteOutpostDb } from './db/open-db';
+import { createBackup, serializeBackup } from './features/backup/backup';
 import { OutpostProvider } from './store/context';
 import { createOutpost } from './store/create-outpost';
 import type { Outpost } from './store/outpost';
 import { createFakeServer, type FakeServer } from './test/fake-server';
+import { expectNoA11yViolations } from './test/axe';
 
 const createdDatabases: string[] = [];
+
+/** Minimal note shape for the backup tests. */
+function note(overrides: Partial<Note> = {}): Note {
+  return {
+    id: 'n1',
+    title: 'Title',
+    body: 'Body',
+    tags: [],
+    pinned: false,
+    deletedAt: null,
+    rev: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
 
 interface Harness {
   outpost: Outpost;
@@ -104,6 +122,85 @@ describe('<App />', () => {
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: /report/ })).toHaveLength(1));
     expect(screen.getByRole('button', { name: /Alpha report/ })).toBeInTheDocument();
+  });
+
+  it('has no WCAG A/AA violations in the default view', async () => {
+    const { outpost } = await renderApp();
+    await outpost.createNote({ title: 'Accessible note', body: 'Body text with some length.' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Accessible note/ })).toBeInTheDocument(),
+    );
+
+    await expectNoA11yViolations(document.body);
+  });
+
+  it('has no WCAG A/AA violations while a conflict waits for a decision', async () => {
+    const { outpost, server, online } = await renderApp();
+    const note = await outpost.createNote({ title: 'Draft' });
+    await outpost.syncNow();
+
+    online.value = false;
+    await outpost.updateNote(note.id, { title: 'My version' });
+    await outpost.syncNow();
+
+    server.externalWrite(note.id, { title: 'Their version' });
+    online.value = true;
+    await outpost.syncNow();
+
+    await waitFor(() => expect(screen.getByRole('alertdialog')).toBeInTheDocument());
+
+    await expectNoA11yViolations(document.body);
+  });
+
+  it('exports a backup file', async () => {
+    const user = userEvent.setup();
+    const { outpost } = await renderApp();
+    await outpost.createNote({ title: 'Back me up' });
+    await waitFor(() => expect(outpost.getNotes()).toHaveLength(1));
+
+    const createObjectURL = vi.fn(() => 'blob:backup');
+    const revokeObjectURL = vi.fn();
+    // Augment the real constructor instead of replacing it: `new URL()` must keep
+    // working elsewhere in the app.
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    await user.click(screen.getByRole('button', { name: /export \.json/i }));
+
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:backup');
+    expect(await screen.findByRole('status')).toHaveTextContent('Exported 1 note');
+  });
+
+  it('imports a backup file through the file picker', async () => {
+    const user = userEvent.setup();
+    const { outpost } = await renderApp();
+
+    const json = serializeBackup(
+      createBackup([note({ id: 'from-file', title: 'Imported note' })], { deviceId: 'other' }),
+    );
+    const file = new File([json], 'outpost.json', { type: 'application/json' });
+
+    await user.upload(screen.getByLabelText('Import a backup file'), file);
+
+    await waitFor(() =>
+      expect(outpost.getNotes().map((candidate) => candidate.title)).toEqual(['Imported note']),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Imported 1 new and 0 updated');
+  });
+
+  it('reports a broken backup file instead of importing half of it', async () => {
+    const user = userEvent.setup();
+    const { outpost } = await renderApp();
+
+    const file = new File(['{"app":"something-else"}'], 'broken.json', {
+      type: 'application/json',
+    });
+    await user.upload(screen.getByLabelText('Import a backup file'), file);
+
+    expect(await screen.findByRole('status')).toHaveTextContent('not exported by Outpost');
+    expect(outpost.getNotes()).toHaveLength(0);
   });
 
   it('moves a note to the trash and restores it from there', async () => {

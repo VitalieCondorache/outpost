@@ -47,6 +47,9 @@ The full reasoning lives in [`docs/adr`](docs/adr):
 
 - **Local-first CRUD** — title, body, tags, pin, trash with soft delete and
   restore, all instant, all offline.
+- **JSON backup** — export every note to a dated file and import it back through
+  the ordinary local-change pipeline, so a restored note syncs (and can conflict)
+  exactly like a typed one. A malformed file is rejected whole, never half-applied.
 - **Debounced autosave** that merges concurrent field edits instead of dropping
   them, and flushes when you switch notes.
 - **Full-text local search** (case- and diacritics-insensitive) over title, body
@@ -64,7 +67,8 @@ The full reasoning lives in [`docs/adr`](docs/adr):
 - **Keyboard-first**: `⌘K` search, `⌘N` new note, `⌘I` inspector.
 - **Accessible by default**: labelled controls, `aria-pressed` / `aria-current`
   states, `role="alertdialog"` for conflicts, visible focus rings,
-  `prefers-reduced-motion` respected.
+  `prefers-reduced-motion` respected — and **enforced** by `axe-core` in the test
+  suite over the WCAG A/AA rule set.
 
 ## Quick start
 
@@ -182,7 +186,7 @@ purpose: the interesting code is ours.
 
 ## Testing
 
-`npm test` runs **80 tests**:
+`npm test` runs **100 tests**:
 
 | Suite                               | What it pins down                                                                                 |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -190,14 +194,19 @@ purpose: the interesting code is ours.
 | `server/test/validate.test.ts` (13) | the request contract, and that a rejected request writes nothing                                  |
 | `app/src/db/repo.test.ts` (17)      | transactional notes + outbox writes, coalescing, batch claiming, chain rebasing                   |
 | `app/src/sync/engine.test.ts` (11)  | offline queueing, reconnect drain, retry backoff, lost-response dedup, all three conflict choices |
+| `app/src/features/backup` (14)      | backup round-trip, file validation, import as a normal local change, restore from trash           |
 | `app/src/sync/*.test.ts` (16)       | pure logic: jitter, caps, mutation kinds, wire shape                                              |
 | `app/src/lib/search.test.ts` (10)   | search, views, sorting, tags, excerpts                                                            |
-| `app/src/App.test.tsx` (4)          | the UI wired to a real store and a real IndexedDB                                                 |
+| `app/src/App.test.tsx` (10)         | the UI wired to a real store and a real IndexedDB, plus axe on the default view and a conflict    |
 
 `npm run e2e` adds the true end-to-end pass: the **production build**, the
 **real service worker**, the **real SQLite API**, `context.setOffline(true)`, an
 offline reload, and a second browser context that pulls what the first one
 pushed.
+
+`npm run size` enforces a bundle budget (target: the whole app under 110 kB gzip)
+and is part of CI, so a convenient new dependency cannot quietly double the
+payload.
 
 Unit tests use an in-memory implementation of the protocol
 (`app/src/test/fake-server.ts`) so they stay fast and deterministic; the
@@ -234,6 +243,7 @@ usually enough to see exactly which mutation went missing.
 | `npm run e2e`                               | builds everything, then runs the Playwright offline suite |
 | `npm run icons`                             | regenerates the PNG icons (pure Node, no image library)   |
 | `npm run screenshot`                        | regenerates the README screenshots from the running app   |
+| `npm run size`                              | checks the production bundle against its gzip budget      |
 | `npm run docker:up` / `npm run docker:down` | the whole stack / plus its volume                         |
 
 ## Known limitations (honest list)
@@ -246,10 +256,16 @@ usually enough to see exactly which mutation went missing.
 - **Conflict detection is per note, not per field.** Two people editing different
   fields of the same note still get the panel. Deliberate — see ADR 002.
 - **No editor niceties**: plain text, no markdown preview, no attachments.
+- **The backup is JSON only**, one file, no images/attachments and no `.zip`; and
+  because the revision is deliberately not imported, restoring an old backup over
+  a note another device has since changed lands as a conflict for you to resolve.
 - **Tombstones expire** after 30 days (`OUTPOST_TOMBSTONE_TTL_MS`), so a device
   offline for longer than that can resurrect a deleted note.
 - **Background Sync is Chromium-only**; Safari and Firefox fall back to the
   `online` event and the retry timer.
+- **Automated accessibility checks cover the WCAG A/AA rule set, minus colour
+  contrast** — jsdom has no layout engine, so contrast is only verified by eye.
+  There is no CI job with a real browser checking it yet.
 - Resolving a conflict is a modal decision; there is no "always keep mine"
   preference yet.
 
@@ -257,9 +273,11 @@ usually enough to see exactly which mutation went missing.
 
 1. Drain the outbox from inside the service worker (true background sync).
 2. Field-level conflict pre-merge, so only genuine text collisions open the panel.
-3. Markdown-lite preview and note export to `.zip`.
+3. Markdown-lite preview and backup to `.zip` (with attachments).
 4. Optional end-to-end encryption of note payloads before they leave the device.
 5. Per-note revision history instead of a single `rev`.
+6. Contrast checking in a real browser (Playwright + axe) so the one skipped rule
+   is covered too.
 
 ## License
 

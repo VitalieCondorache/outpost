@@ -158,6 +158,14 @@ export class Outpost {
     await this.refresh();
   }
 
+  /**
+   * Runs a sync pass.
+   *
+   * If a pass is already running this only marks that one more pass is wanted and
+   * resolves with the current snapshot — it never awaits the queued pass, so
+   * callers that need an empty outbox must drain in a loop (the UI does not care:
+   * it renders the snapshot either way).
+   */
   syncNow(): Promise<SyncSnapshot> {
     return this.engine.sync('manual');
   }
@@ -177,6 +185,52 @@ export class Outpost {
 
   getDeviceId(): string {
     return this.engine.getDeviceId();
+  }
+
+  /** The local notes as the store sees them (source for a backup). */
+  getNotes(): Note[] {
+    return this.state.notes;
+  }
+
+  /**
+   * Writes a parsed backup into the local store, as ordinary local changes.
+   *
+   * Import deliberately does *not* touch the revision: a restored note comes back
+   * with `rev 0` and has to earn a new revision through the normal sync flow. If
+   * the server already knows a newer version of the same note, the import lands
+   * as a conflict and the user decides — the same rule as everything else.
+   */
+  async importNotes(notes: Note[]): Promise<{ created: number; updated: number }> {
+    let created = 0;
+    let updated = 0;
+
+    for (const incoming of notes) {
+      const existing = await this.repo.getNote(incoming.id);
+      const updatedAt = Date.now();
+
+      const next: Note = existing
+        ? {
+            ...existing,
+            title: incoming.title,
+            body: incoming.body,
+            tags: incoming.tags,
+            pinned: incoming.pinned,
+            deletedAt: incoming.deletedAt,
+            updatedAt,
+          }
+        : { ...incoming, rev: 0, updatedAt };
+
+      const previous = existing ?? { ...next, rev: 0 };
+      const mutation = buildMutation(next, previous, { deviceId: this.engine.getDeviceId() });
+      await this.repo.commitLocalChange(next, mutation);
+
+      if (existing) updated += 1;
+      else created += 1;
+    }
+
+    // One refresh and one sync pass for the whole file, not one per note.
+    await this.afterLocalChange();
+    return { created, updated };
   }
 
   /** Danger zone: wipes local data (inspector button and tests). */

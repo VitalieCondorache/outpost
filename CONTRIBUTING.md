@@ -19,6 +19,7 @@ npm run format:check
 npm run typecheck
 npm run lint
 npm test
+npm run build && npm run size
 npm run e2e          # builds first; needs `npx playwright install chromium` once
 ```
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Note } from '@outpost/shared';
+import { BackupControls } from './features/backup/BackupControls';
 import { NoteEditor } from './features/notes/NoteEditor';
 import { NoteList } from './features/notes/NoteList';
 import { InstallPrompt } from './features/pwa/InstallPrompt';
@@ -142,6 +143,7 @@ export function App() {
         <NoteList notes={visible} selectedId={selectedId} view={view} onSelect={setSelectedId} />
 
         <footer className="sidebar__footer">
+          <BackupControls />
           <button
             type="button"
             className="button button--ghost"

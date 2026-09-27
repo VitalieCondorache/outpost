@@ -1,0 +1,62 @@
+name: Bug report
+description: Something is wrong — especially welcome if it is a sync bug.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For anything that touches syncing, the sync
+        inspector output is worth more than a description: it shows the exact
+        mutation lifecycle.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go offline in DevTools → Network
+        2. Edit a note
+        3. Reload, go back online
+        4. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: conditions
+    attributes:
+      label: Which conditions were involved?
+      multiple: true
+      options:
+        - Offline when it happened
+        - After a reload
+        - Two tabs open
+        - Two devices / browser profiles
+        - After resolving a conflict
+        - Only after a while (background retry)
+    validations:
+      required: true
+  - type: textarea
+    id: inspector
+    attributes:
+      label: Sync inspector output
+      description: Open the inspector (⌘I) and paste the phase, pending count, cursor and outbox rows.
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 141 on macOS 15
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I tried reproducing it with `localStorage.setItem('outpost:debug', '1')` and included the log
+        - label: I checked the Known limitations section of the README

@@ -69,6 +69,27 @@ async function writeNote(page, note) {
   await expect(page.getByRole('button', { name: new RegExp(note.title) })).toBeVisible();
 }
 
+/**
+ * Wipes the demo database, waiting for the API to accept connections first.
+ *
+ * The servers may be started by hand or by `docker compose`, so "not listening
+ * yet" is a normal condition and must not fail the first shot.
+ *
+ * @param {import('@playwright/test').APIRequestContext} request
+ */
+async function resetDemoApi(request) {
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    try {
+      const response = await request.post(`${API_URL}/api/dev/reset`);
+      if (response.ok()) return;
+    } catch {
+      // not listening yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`the demo API at ${API_URL} never became ready (is it running?)`);
+}
+
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   console.log(`capturing ${URL}`);
@@ -82,10 +103,7 @@ async function main() {
 
   // Start from an empty server so the shots are reproducible: a fresh browser
   // context plus a wiped API means no leftovers from a previous run.
-  const reset = await context.request.post(`${API_URL}/api/dev/reset`);
-  if (!reset.ok()) {
-    throw new Error(`could not reset the demo API (${reset.status()}) — is it running?`);
-  }
+  await resetDemoApi(context.request);
 
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);

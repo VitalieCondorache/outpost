@@ -38,6 +38,9 @@ jobs:
       - name: Build (server + PWA)
         run: npm run build
 
+      - name: Bundle budget
+        run: npm run size
+
       - uses: actions/upload-artifact@v4
         with:
           name: pwa-build
