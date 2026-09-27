@@ -13,7 +13,7 @@ server/data/
 coverage/
 playwright-report/
 test-results/
-e2e/.tmp/
+**/e2e/.tmp/
 
 # env / editor / os
 .env
