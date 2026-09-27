@@ -15,10 +15,28 @@ library.
   <img src="docs/screenshot.png" alt="Outpost running with a note open and one change queued offline" width="880">
 </p>
 
+<!-- Replace `USER` with your GitHub account when you publish: this is the only
+     badge that needs an owner; the rest resolve on their own. -->
 [![CI](https://github.com/USER/outpost/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6ee7b7.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.5-6ee7b7.svg)](https://nodejs.org)
 [![Native deps](https://img.shields.io/badge/native%20deps-none-6ee7b7.svg)](#tech-stack)
+
+## Contents
+
+- [What is actually hard here](#what-is-actually-hard-here)
+- [Start here: the three files that matter](#start-here-the-three-files-that-matter)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [How the sync actually works](#how-the-sync-actually-works)
+- [Repository layout](#repository-layout)
+- [Tech stack](#tech-stack)
+- [Testing](#testing)
+- [Debugging the sync pipeline](#debugging-the-sync-pipeline)
+- [Scripts](#scripts)
+- [Known limitations (honest list)](#known-limitations-honest-list)
+- [Roadmap](#roadmap)
+- [Engineering notes: the bugs behind the code](docs/engineering-notes.md)
 
 ---
 
@@ -42,6 +60,26 @@ The full reasoning lives in [`docs/adr`](docs/adr):
 - [ADR 001 — Outbox pattern with mutation coalescing](docs/adr/001-outbox-pattern.md)
 - [ADR 002 — Conflicts are resolved by the user, not by a policy](docs/adr/002-conflict-resolution.md)
 - [ADR 003 — Delta sync with a monotonic sequence cursor](docs/adr/003-monotonic-cursor.md)
+
+The bugs behind this code — including one where every unit test was green while the
+shipped server could not even start — are written up in
+[`docs/engineering-notes.md`](docs/engineering-notes.md).
+
+## Start here: the three files that matter
+
+Everything else is plumbing. If you have ten minutes, read these three — in this
+order:
+
+| File                                               | What to look for                                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [`app/src/db/repo.ts`](app/src/db/repo.ts)         | the outbox: note + mutation in one transaction, mutation coalescing, batch claiming, revision chaining |
+| [`app/src/sync/engine.ts`](app/src/sync/engine.ts) | the loop: push in passes, settle the results, park conflicts, back off, delta pull                     |
+| [`server/src/db.ts`](server/src/db.ts)             | the contract: optimistic `rev` check, idempotency ledger, tombstones, monotonic `seq` cursor           |
+
+Two more for context: [`packages/shared/src/index.ts`](packages/shared/src/index.ts)
+is the entire wire protocol (types only, shared by both sides), and
+[`docs/engineering-notes.md`](docs/engineering-notes.md) is the story of the bugs
+those files survived.
 
 ## Features
 
@@ -146,6 +184,51 @@ with both versions.
 └──────────────────────────────────────────────────────────────┘
 ```
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI
+    participant IDB as IndexedDB
+    participant E as SyncEngine
+    participant API as API
+
+    UI->>IDB: put(note) + put(mutation) — one transaction
+    UI-->>UI: render immediately (no spinner, no await)
+    UI->>E: sync('local-change')
+    E->>IDB: takeBatch() — claim, at most one op per note
+    E->>API: POST /api/sync (stable idempotency keys)
+    alt applied
+        API-->>E: { status: applied, rev, server }
+        E->>IDB: settle() then bumpChainBaseRev()
+    else stale baseRev
+        API-->>E: { status: conflict, server }
+        E->>IDB: block the mutation, persist the conflict
+        E-->>UI: panel: keep mine / keep theirs / keep both
+    else transport error
+        E->>IDB: attempts++, nextAttemptAt = now + backoff
+        E->>E: retry with jitter (see the state machine below)
+    end
+    E->>API: GET /api/notes?since=cursor
+    E->>IDB: applyServerNotes() — skip notes with pending ops
+    E->>IDB: setCursor()
+```
+
+The outbox itself is a small state machine — and the reason a queue of 40 keystrokes
+collapses into one mutation:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Queued: local edit (note + op in one tx)
+    Queued --> Queued: another edit → payload merged (coalescing)
+    Queued --> InFlight: takeBatch() claims it
+    InFlight --> [*]: applied → settle(), chain rebased
+    InFlight --> RetryWait: transport error
+    RetryWait --> Queued: nextAttemptAt elapsed
+    InFlight --> Blocked: conflict → the user decides
+    Blocked --> Queued: "keep mine" (rebased on the server rev)
+    Blocked --> [*]: "keep theirs" / "keep both"
+```
+
 The API has four endpoints and no business logic beyond these rules:
 
 | Method | Path                     | Purpose                                                                   |
@@ -207,6 +290,16 @@ pushed.
 `npm run size` enforces a bundle budget (target: the whole app under 110 kB gzip)
 and is part of CI, so a convenient new dependency cannot quietly double the
 payload.
+
+Everything above, in the exact order CI runs it:
+
+```bash
+npm ci
+npm run format:check && npm run typecheck && npm run lint
+npm test
+npm run build && npm run size
+npm run e2e
+```
 
 Unit tests use an in-memory implementation of the protocol
 (`app/src/test/fake-server.ts`) so they stay fast and deterministic; the
