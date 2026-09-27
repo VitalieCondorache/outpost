@@ -1,18 +1,18 @@
 # Outpost
 
-**Offline-first notes that never lose an edit.**
+**Offline-first notes that never lose an edit — and a sync engine you can read.**
 
-Write with the plane mode on. Close the tab. Come back two hours later in a
-tunnel. When the network returns, the app drains its own queue, pulls what the
-other devices did, and — when the same note was edited twice — refuses to guess
-which version you want to keep.
-
-This is a small app on purpose. It exists to demonstrate the part that is
-genuinely hard: **client-side sync**, done explicitly instead of outsourced to a
-library.
+Write with airplane mode on. Close the tab. Come back two hours later in a tunnel.
+When the network returns, the app drains its own queue, pulls what the other devices
+did, and — when the same note was edited twice — refuses to guess which version you
+want to keep.
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Outpost running with a note open and one change queued offline" width="880">
+  <img src="docs/screenshot.png" alt="Outpost with a note open while offline, one change queued in the outbox" width="880">
+</p>
+
+<p align="center">
+  <sub>Written with the network off. The badge counts one queued change, and the editor never waited for anything.</sub>
 </p>
 
 [![CI](https://github.com/VitalieCondorache/outpost/actions/workflows/ci.yml/badge.svg)](https://github.com/VitalieCondorache/outpost/actions/workflows/ci.yml)
@@ -20,12 +20,65 @@ library.
 [![Node](https://img.shields.io/badge/node-%3E%3D24-6ee7b7.svg)](https://nodejs.org)
 [![Native deps](https://img.shields.io/badge/native%20deps-none-6ee7b7.svg)](#tech-stack)
 
+## What this is
+
+A **notes app** — title, body, tags, pin, trash with restore, full-text search and a
+JSON backup — that is really a **worked example of client-side sync**. Every part that
+makes offline editing genuinely hard is written out in this repository instead of
+being hidden behind a library:
+
+- **Outbox.** A note and its mutation are committed in one IndexedDB transaction, so a
+  crash, a reload or a browser restart cannot lose an edit.
+- **Idempotency.** Stable mutation ids plus a server-side ledger: a retry after a lost
+  response can never apply the same change twice.
+- **Coalescing.** Forty keystrokes become one pending mutation per note, not forty.
+- **Delta sync** on a server-assigned monotonic `seq` cursor — not on a timestamp that
+  two rows can share.
+- **Conflicts** are shown to you, both versions side by side, and never silently
+  overwritten. **Deletes are tombstones**, so someone else's pull cannot resurrect a
+  note you trashed.
+
+**What it is not:** a notes app that caches its shell and calls that offline support; a
+wrapper around a hosted backend; a websocket demo. Nothing sits in front of the
+interesting part — [`app/src/sync/engine.ts`](app/src/sync/engine.ts) is about 470
+readable lines, and reading it is the point of the project.
+
+|                          |                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| **Stack**                | React 19 · TypeScript (strict) · Vite 6 · IndexedDB via `idb` · Hono · `node:sqlite` |
+| **Runtime dependencies** | three, all in the browser: `react`, `react-dom`, `idb`. No native modules, no ORM    |
+| **Size**                 | ~3.9k lines of application TypeScript, ~1.8k lines of tests                          |
+| **Tests**                | 105 unit and integration · 6 tooling · 2 end-to-end offline scenarios                |
+| **Bundle**               | 85.9 kB gzip, inside a 110 kB budget that CI enforces                                |
+
+Every claim in this file has a command next to it — see
+[How carefully was this written?](#how-carefully-was-this-written).
+
+## Run it in 60 seconds
+
+```bash
+npm install
+npm run dev     # Node 24+: node:sqlite ships with the runtime, so there is nothing to compile
+```
+
+- App: <http://localhost:5173>
+- API: <http://localhost:8787/api/health>
+
+No database to install, no API keys, no separate build step. Then walk
+[the offline flow](#try-the-actual-offline-flow) — go offline, write, watch the queue
+fill up, come back online — or read
+[how the sync actually works](#how-the-sync-actually-works) for the diagrams. Docker
+and Codespaces are under [Ways to run it](#ways-to-run-it).
+
 ## Contents
 
+- [What this is](#what-this-is)
+- [Run it in 60 seconds](#run-it-in-60-seconds)
 - [What is actually hard here](#what-is-actually-hard-here)
+- [How carefully was this written?](#how-carefully-was-this-written)
 - [Start here: the three files that matter](#start-here-the-three-files-that-matter)
 - [Features](#features)
-- [Quick start](#quick-start)
+- [Ways to run it](#ways-to-run-it)
 - [How the sync actually works](#how-the-sync-actually-works)
 - [Repository layout](#repository-layout)
 - [Tech stack](#tech-stack)
@@ -65,6 +118,25 @@ The bugs behind this code — including one where every unit test was green whil
 shipped server could not even start, and one where the test double told the app to
 keep a deleted note in the trash — are written up in
 [`docs/engineering-notes.md`](docs/engineering-notes.md).
+
+## How carefully was this written?
+
+The useful question about a project this size is not how many features it has, but
+what happens when it breaks. None of the lines below is a claim you have to take on
+faith: each one names the file or the command that proves it.
+
+| Guarantee                                                                                                                     | Where it is enforced                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **105 tests** over the sync engine, the repository layer, the UI and the server rules                                         | `npm test`, on every push                                                           |
+| The UI runs against a **real IndexedDB**, audited with **axe** (WCAG A/AA, minus contrast: jsdom has no layout)               | [`app/src/App.test.tsx`](app/src/App.test.tsx)                                      |
+| The offline path is proven **end to end**: production build, real service worker, real SQLite, two devices                    | `npm run e2e`, its own CI job                                                       |
+| **Strict TypeScript**, and `any` / `!` are lint errors rather than habits                                                     | [`tsconfig.base.json`](tsconfig.base.json) + [`eslint.config.js`](eslint.config.js) |
+| The bundle cannot quietly double                                                                                              | 110 kB gzip budget, `npm run size`                                                  |
+| The server that ships is the server that is tested: CI builds both Docker images and curls `/api/health` inside the container | [`.github/workflows/ci.yml`](.github/workflows/ci.yml)                              |
+| The three decisions that were genuinely arguable are written down as ADRs                                                     | [`docs/adr/`](docs/adr)                                                             |
+| Six bugs that only appeared once the thing was really run — symptom, evidence, cause, fix, and the test that now pins it      | [`docs/engineering-notes.md`](docs/engineering-notes.md)                            |
+| The dependency surface stays small and current                                                                                | three runtime deps, Dependabot weekly, read-only CI token                           |
+| The one limitation that would matter to a stranger — no auth — is stated loudly                                               | [SECURITY.md](SECURITY.md) and [Known limitations](#known-limitations-honest-list)  |
 
 ## Start here: the three files that matter
 
@@ -109,40 +181,33 @@ those files survived.
   `prefers-reduced-motion` respected — and **enforced** by `axe-core` in the test
   suite over the WCAG A/AA rule set.
 
-## Quick start
+## Ways to run it
 
-```bash
-npm install
-npm run dev
-```
-
-**Node 24 is required** (CI, the Docker image and the devcontainer all run it):
-the API uses `node:sqlite`, which ships inside the runtime, so there is no native
-module to compile and no database to install.
-
-- App: <http://localhost:5173>
-- API: <http://localhost:8787/api/health>
-
-### Or with zero local setup (GitHub Codespaces)
-
-Click **Code → Codespaces → Create codespace on main**. The
-[devcontainer](.devcontainer/devcontainer.json) installs the dependencies, the
-Playwright browser and opens the app in a browser tab for you. Then run
-`npm run dev` in the terminal it gives you.
-
-### Or with Docker (no local Node needed)
+### With Docker (no local Node needed)
 
 ```bash
 docker compose up --build
 # → http://localhost:8080
 ```
 
-The `web` container serves the built PWA and proxies `/api` to the `api`
-container, so everything runs on a single origin.
+The `web` container serves the built PWA and proxies `/api` to the `api` container,
+so everything runs on a single origin. The API container has a healthcheck, and the
+SQLite file lives on a named volume — `docker compose down` without `-v` keeps your
+notes.
 
-### Try the actual offline flow
+### With zero local setup (GitHub Codespaces)
 
-1. `npm run dev` and open the app.
+Click **Code → Codespaces → Create codespace on main**. The
+[devcontainer](.devcontainer/devcontainer.json) installs the dependencies, the
+Playwright browser and opens the app in a browser tab for you. Then run
+`npm run dev` in the terminal it gives you.
+
+**Node 24 is required** here, in CI and in the Docker images: the API uses
+`node:sqlite`, which ships with the runtime, so there is no native module to compile.
+
+## Try the actual offline flow
+
+1. Open the app at <http://localhost:5173> ([start it first](#run-it-in-60-seconds)).
 2. DevTools → Network → **Offline**. The badge turns amber: _Offline_.
 3. Press `⌘N` and write a note. The badge becomes _Offline · 1 change queued_ —
    keystrokes are merged into a single mutation, watch it in the inspector (`⌘I`).
