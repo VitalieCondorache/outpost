@@ -1,34 +1,18 @@
-# The interesting dependencies here are the ones that ship in the bundle: the app
-# runs on react, react-dom and idb, and that list is a promise the README makes.
-# Weekly updates keep it visible instead of letting it drift.
+# Keeps the dependency surface visible instead of letting it drift. The interesting
+# list is short on purpose: react, react-dom and idb are all the app ships.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      # One PR for the dev toolchain: vitest, eslint, prettier and friends move
-      # together, and reviewing them one by one is noise.
-      tooling:
-        dependency-type: development
-        patterns:
-          - '*'
-    ignore:
-      # React 19 is the tested major; a major bump is a deliberate change, not a
-      # Tuesday morning surprise.
-      - dependency-name: react
-        update-types: ['version-update:semver-major']
-      - dependency-name: react-dom
-        update-types: ['version-update:semver-major']
+      interval: monthly
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
 
   - package-ecosystem: docker
     directory: /docker
     schedule:
-      interval: weekly
+      interval: monthly

@@ -1,6 +1,0 @@
-# Security reports must not be filed as public issues — see SECURITY.md.
-blank_issues_enabled: false
-contact_links:
-  - name: Report a vulnerability (private)
-    url: https://github.com/VitalieCondorache/outpost/security/advisories/new
-    about: Please report anything exploitable privately, never in a public issue.
