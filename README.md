@@ -15,10 +15,7 @@ library.
   <img src="docs/screenshot.png" alt="Outpost running with a note open and one change queued offline" width="880">
 </p>
 
-<!-- Replace `USER` with your GitHub account when you publish: this is the only
-     badge that needs an owner; the rest resolve on their own. -->
-
-[![CI](https://github.com/USER/outpost/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![CI](https://github.com/VitalieCondorache/outpost/actions/workflows/ci.yml/badge.svg)](https://github.com/VitalieCondorache/outpost/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6ee7b7.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-6ee7b7.svg)](https://nodejs.org)
 [![Native deps](https://img.shields.io/badge/native%20deps-none-6ee7b7.svg)](#tech-stack)
@@ -37,6 +34,8 @@ library.
 - [Scripts](#scripts)
 - [Known limitations (honest list)](#known-limitations-honest-list)
 - [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Security](#security)
 - [Engineering notes: the bugs behind the code](docs/engineering-notes.md)
 
 ---
@@ -358,6 +357,7 @@ usually enough to see exactly which mutation went missing.
 | `npm run e2e`                               | builds everything, then runs the Playwright offline suite |
 | `npm run icons`                             | regenerates the PNG icons (pure Node, no image library)   |
 | `npm run screenshot`                        | regenerates the README screenshots from the running app   |
+| `npm run probe:gif`                         | writes a bitmap that checks the GIF encoder by eye        |
 | `npm run size`                              | checks the production bundle against its gzip budget      |
 | `npm run docker:up` / `npm run docker:down` | the whole stack / plus its volume                         |
 
@@ -393,6 +393,20 @@ usually enough to see exactly which mutation went missing.
 5. Per-note revision history instead of a single `rev`.
 6. Contrast checking in a real browser (Playwright + axe) so the one skipped rule
    is covered too.
+
+## Contributing
+
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the
+conventions, the exact command list CI runs, and the three protocol invariants that
+must not break.
+
+## Security
+
+Outpost is a single-user sync server with **no authentication**: whoever can reach
+`/api` can read and write every note, and the API answers `Access-Control-Allow-Origin: *`.
+It is built to run on your own machine or LAN, not to be exposed to the internet as
+it is. [SECURITY.md](SECURITY.md) spells out the assumptions and how to report a
+problem privately.
 
 ## License
 
