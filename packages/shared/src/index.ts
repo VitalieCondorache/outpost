@@ -1,21 +1,11 @@
 /**
- * Wire protocol shared by the PWA (client) and the sync API (server).
+ * Wire protocol shared by the PWA and the sync API.
  *
- * Design decisions worth knowing before you read the rest:
- *
- * 1. Every note carries a server-assigned, monotonically increasing `rev`.
- *    A client mutation states which revision it was based on (`baseRev`).
- *    The server only accepts the mutation when `baseRev` still matches, which
- *    turns conflicting concurrent edits into an explicit HTTP-level signal
- *    instead of a silent overwrite.
- *
- * 2. Every mutation carries an `id` that never changes across retries. The
- *    server keeps a ledger of applied mutation ids, so a retry after a lost
- *    response can never be applied twice (idempotency).
- *
- * 3. Deletes are soft: `deletedAt` is a tombstone that syncs like any other
- *    field. Without tombstones a deleted note would be resurrected by the
- *    next pull from another device.
+ * Three rules hold the design together. `rev` is server-assigned, and a mutation
+ * states the revision it was based on, so a stale edit becomes a `conflict` instead
+ * of an overwrite. A mutation `id` never changes across retries, which is what makes
+ * the server-side ledger enough to deduplicate them. Deletions are tombstones
+ * (`deletedAt`), because a row that disappears cannot be synced.
  */
 
 export interface Note {
