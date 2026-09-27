@@ -11,7 +11,7 @@
     "server"
   ],
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
@@ -24,6 +24,7 @@
     "size": "node tools/check-bundle-size.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:tools": "node --test tools/lib/*.test.mjs",
     "test:watch": "npm run test:watch -w @outpost/app",
     "e2e": "npm run build && npm run e2e -w @outpost/app",
     "lint": "eslint .",
