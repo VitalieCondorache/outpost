@@ -3,9 +3,9 @@
 **Offline-first notes that never lose an edit — and a sync engine you can read.**
 
 Write with airplane mode on. Close the tab. Come back two hours later in a tunnel.
-When the network returns, the app drains its own queue, pulls what the other devices
-did, and — when the same note was edited twice — refuses to guess which version you
-want to keep.
+When the network returns it drains its own queue, pulls what the other devices did,
+and, if the same note was edited twice, refuses to guess which version you want to
+keep.
 
 <p align="center">
   <img src="docs/screenshot.png" alt="Outpost with a note open while offline, one change queued in the outbox" width="880">
@@ -48,11 +48,8 @@ readable lines, and reading it is the point of the project.
 | **Stack**                | React 19 · TypeScript (strict) · Vite 6 · IndexedDB via `idb` · Hono · `node:sqlite` |
 | **Runtime dependencies** | three, all in the browser: `react`, `react-dom`, `idb`. No native modules, no ORM    |
 | **Size**                 | ~3.9k lines of application TypeScript, ~1.8k lines of tests                          |
-| **Tests**                | 105 unit and integration · 6 tooling · 2 end-to-end offline scenarios                |
+| **Tests**                | 105 unit and integration · 3 tooling · 2 end-to-end offline scenarios                |
 | **Bundle**               | 85.9 kB gzip, inside a 110 kB budget that CI enforces                                |
-
-Every claim in this file has a command next to it — see
-[How carefully was this written?](#how-carefully-was-this-written).
 
 ## Run it in 60 seconds
 
@@ -75,7 +72,6 @@ and Codespaces are under [Ways to run it](#ways-to-run-it).
 - [What this is](#what-this-is)
 - [Run it in 60 seconds](#run-it-in-60-seconds)
 - [What is actually hard here](#what-is-actually-hard-here)
-- [How carefully was this written?](#how-carefully-was-this-written)
 - [Start here: the three files that matter](#start-here-the-three-files-that-matter)
 - [Features](#features)
 - [Ways to run it](#ways-to-run-it)
@@ -118,25 +114,6 @@ The bugs behind this code — including one where every unit test was green whil
 shipped server could not even start, and one where the test double told the app to
 keep a deleted note in the trash — are written up in
 [`docs/engineering-notes.md`](docs/engineering-notes.md).
-
-## How carefully was this written?
-
-The useful question about a project this size is not how many features it has, but
-what happens when it breaks. None of the lines below is a claim you have to take on
-faith: each one names the file or the command that proves it.
-
-| Guarantee                                                                                                                     | Where it is enforced                                                                |
-| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **105 tests** over the sync engine, the repository layer, the UI and the server rules                                         | `npm test`, on every push                                                           |
-| The UI runs against a **real IndexedDB**, audited with **axe** (WCAG A/AA, minus contrast: jsdom has no layout)               | [`app/src/App.test.tsx`](app/src/App.test.tsx)                                      |
-| The offline path is proven **end to end**: production build, real service worker, real SQLite, two devices                    | `npm run e2e`, its own CI job                                                       |
-| **Strict TypeScript**, and `any` / `!` are lint errors rather than habits                                                     | [`tsconfig.base.json`](tsconfig.base.json) + [`eslint.config.js`](eslint.config.js) |
-| The bundle cannot quietly double                                                                                              | 110 kB gzip budget, `npm run size`                                                  |
-| The server that ships is the server that is tested: CI builds both Docker images and curls `/api/health` inside the container | [`.github/workflows/ci.yml`](.github/workflows/ci.yml)                              |
-| The three decisions that were genuinely arguable are written down as ADRs                                                     | [`docs/adr/`](docs/adr)                                                             |
-| Six bugs that only appeared once the thing was really run — symptom, evidence, cause, fix, and the test that now pins it      | [`docs/engineering-notes.md`](docs/engineering-notes.md)                            |
-| The dependency surface stays small and current                                                                                | three runtime deps, Dependabot weekly, read-only CI token                           |
-| The one limitation that would matter to a stranger — no auth — is stated loudly                                               | [SECURITY.md](SECURITY.md) and [Known limitations](#known-limitations-honest-list)  |
 
 ## Start here: the three files that matter
 
@@ -330,7 +307,7 @@ The API has four endpoints and no business logic beyond these rules:
 ├─ packages/shared/        the wire protocol (types only, shared by both sides)
 ├─ docs/adr/               the decisions worth arguing about
 ├─ docker/, docker-compose.yml
-└─ tools/                  repo scripts: icons, PNG/GIF encoders, screenshots, size budget
+└─ tools/                  repo scripts: icon generator, screenshots, size budget
 ```
 
 ## Tech stack
@@ -383,6 +360,11 @@ npm run build && npm run size
 npm run e2e
 ```
 
+CI runs that list on every push and pull request, in three jobs: the checks job runs
+everything above, a second job installs Chromium and runs the offline suite against
+the production build, and a third builds both Docker images and curls `/api/health`
+inside the container. A bundle that grew or a server that cannot start fails there.
+
 Unit tests use an in-memory implementation of the protocol
 (`app/src/test/fake-server.ts`) so they stay fast and deterministic; the
 Playwright suite is what proves the fake still matches the real server. Its own
@@ -422,7 +404,6 @@ usually enough to see exactly which mutation went missing.
 | `npm run e2e`                               | builds everything, then runs the Playwright offline suite |
 | `npm run icons`                             | regenerates the PNG icons (pure Node, no image library)   |
 | `npm run screenshot`                        | regenerates the README screenshots from the running app   |
-| `npm run probe:gif`                         | writes a bitmap that checks the GIF encoder by eye        |
 | `npm run size`                              | checks the production bundle against its gzip budget      |
 | `npm run docker:up` / `npm run docker:down` | the whole stack / plus its volume                         |
 
