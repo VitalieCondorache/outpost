@@ -8,8 +8,9 @@ import { afterEach, vi } from 'vitest';
 
 // Every write in this app goes through IndexedDB (a real one, via
 // fake-indexeddb) and is followed by a re-read, so the default 1s budget for
-// `waitFor`/`findBy*` is tight on a loaded machine. A slow test is not a bug.
-configure({ asyncUtilTimeout: 5_000 });
+// `waitFor`/`findBy*` is tight on a loaded machine. Keep this below the Vitest
+// `testTimeout`, so a real failure is reported as a failed assertion.
+configure({ asyncUtilTimeout: 3_000 });
 
 afterEach(() => {
   cleanup();

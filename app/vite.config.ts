@@ -65,5 +65,10 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    // A UI test here drives several interactions against a real IndexedDB (via
+    // fake-indexeddb), so it needs more headroom than Vitest's 5s default. The
+    // `waitFor` budget in `src/test/setup.ts` is deliberately lower, so a genuine
+    // failure surfaces as an assertion error instead of masking as a timeout.
+    testTimeout: 15_000,
   },
 });

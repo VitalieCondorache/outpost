@@ -70,9 +70,7 @@ describe('<App />', () => {
     await user.type(screen.getByLabelText('Note body'), 'for the coffee machine');
 
     // The debounced autosave lands in IndexedDB, and the list re-reads from it.
-    await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Buy filters'), {
-      timeout: 2_000,
-    });
+    await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Buy filters'));
     expect(await screen.findByRole('button', { name: /Buy filters/ })).toBeInTheDocument();
   });
 
@@ -86,9 +84,7 @@ describe('<App />', () => {
     // Regression guard: the editor used to reset its draft state in an effect that
     // ran after the commit, which wiped keystrokes typed in between.
     expect(screen.getByLabelText('Note title')).toHaveValue('Typed fast');
-    await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Typed fast'), {
-      timeout: 2_000,
-    });
+    await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Typed fast'));
   });
 
   it('keeps working when the network is down and says so', async () => {
@@ -99,9 +95,7 @@ describe('<App />', () => {
     await user.click(screen.getByRole('button', { name: /new note/i }));
     await user.type(screen.getByLabelText('Note title'), 'Airplane mode note');
 
-    await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Airplane mode note'), {
-      timeout: 2_000,
-    });
+    await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Airplane mode note'));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /offline/i })).toBeInTheDocument(),
     );

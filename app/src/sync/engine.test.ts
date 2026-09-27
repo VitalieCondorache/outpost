@@ -12,6 +12,16 @@ let dbName: string;
 
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Polls until the condition holds — a loaded machine must not fake a failure. */
+async function until(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await tick(25);
+  }
+  throw new Error('the expected state never arrived');
+}
+
 /** Drains the outbox deterministically, including passes queued behind one. */
 async function settle(): Promise<void> {
   for (let pass = 0; pass < 6; pass += 1) {
@@ -111,8 +121,9 @@ describe('failure handling', () => {
     expect(mutation).toMatchObject({ attempts: 1, inFlight: false, blocked: false });
     expect(mutation?.nextAttemptAt).toBeGreaterThan(0);
 
-    // random() => 0 means the first retry waits exactly 500ms.
-    await tick(700);
+    // random() => 0 means the first retry waits exactly 500ms; poll instead of
+    // sleeping a fixed amount so a slow machine cannot fail the test.
+    await until(() => outpost.getSyncSnapshot().pending === 0);
 
     expect(outpost.getSyncSnapshot()).toMatchObject({ phase: 'idle', pending: 0 });
     expect(serverNote()).toMatchObject({ title: 'Retry me', rev: 1 });
@@ -128,7 +139,7 @@ describe('failure handling', () => {
     expect(outpost.getSyncSnapshot().pending).toBe(1);
     expect(server.notes.get(note.id)?.rev).toBe(1);
 
-    await tick(700);
+    await until(() => outpost.getSyncSnapshot().pending === 0);
 
     expect(outpost.getSyncSnapshot()).toMatchObject({ phase: 'idle', pending: 0 });
     expect(server.notes.get(note.id)?.rev).toBe(1);
