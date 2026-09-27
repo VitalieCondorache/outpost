@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev: api + app",
+      "detail": "Sync API on :8787, app on :5173 (Vite proxies /api)",
+      "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "group": "dev", "panel": "dedicated" }
+    },
+    {
+      "label": "test: unit",
+      "type": "shell",
+      "command": "npm test",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "group": "test", "panel": "dedicated" }
+    },
+    {
+      "label": "test: tools",
+      "detail": "The repo scripts: PNG/GIF encoders",
+      "type": "shell",
+      "command": "npm run test:tools",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "group": "test", "panel": "dedicated" }
+    },
+    {
+      "label": "test: e2e (offline)",
+      "detail": "Builds, then runs the Playwright suite against the real API",
+      "type": "shell",
+      "command": "npm run e2e",
+      "problemMatcher": [],
+      "presentation": { "group": "test", "panel": "dedicated" }
+    },
+    {
+      "label": "verify: like CI",
+      "detail": "format, types, lint, tests, build, bundle budget",
+      "type": "shell",
+      "command": "npm run format:check && npm run typecheck && npm run lint && npm test && npm run test:tools && npm run build && npm run size",
+      "problemMatcher": [],
+      "presentation": { "group": "test", "panel": "dedicated" }
+    }
+  ]
+}

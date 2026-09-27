@@ -1,0 +1,49 @@
+{
+  "name": "Outpost — offline-first notes",
+  "build": { "dockerfile": "Dockerfile" },
+
+  // `npm ci` first (must succeed), then the Chromium build the Playwright suite
+  // needs. The browser step is best effort, so a slow or restricted network
+  // cannot fail the whole container creation.
+  "postCreateCommand": "npm ci && (npx playwright install --with-deps chromium || echo 'run: npx playwright install --with-deps chromium (needed for npm run e2e)')",
+
+  "forwardPorts": [5173, 8787],
+  "portsAttributes": {
+    "5173": {
+      "label": "Outpost app",
+      "onAutoForward": "openBrowser"
+    },
+    "8787": {
+      "label": "Sync API",
+      "onAutoForward": "silent"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "vitest.explorer",
+        "ms-playwright.playwright",
+        "bierner.markdown-mermaid"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "typescript.preferences.importModuleSpecifier": "relative",
+        "files.exclude": { "**/dist": true, "**/dev-dist": true, "**/node_modules": true },
+        "search.exclude": { "**/package-lock.json": true, "**/dist": true },
+        "markdown.preview.breaks": false
+      }
+    }
+  },
+
+  "remoteUser": "node",
+
+  // The Playwright suite runs a real service worker and a real SQLite API; two
+  // cores are enough, one is not.
+  "hostRequirements": { "cpus": 2, "memory": "4gb" }
+}
