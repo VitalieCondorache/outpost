@@ -256,7 +256,9 @@ if (codeSize === 12) {
 the encoder can no longer rot in an unreferenced file, and they were checked
 against a real decoder: the probe comes back pixel-exact in Chromium, and so does
 a 512×512, 256-colour image — the size that crosses the 12-bit ceiling and forces
-a Clear code, a path no unit test reached.
+a Clear code, a path no unit test reached. The probe itself stayed in the repo
+(`tools/gif-probe.mjs`, `npm run probe:gif`), because a claim about an encoder is
+only worth something if somebody else can reproduce it.
 
 ---
 
