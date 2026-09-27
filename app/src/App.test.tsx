@@ -66,8 +66,12 @@ describe('<App />', () => {
     const { outpost } = await renderApp();
 
     await user.click(screen.getByRole('button', { name: /new note/i }));
-    await user.type(screen.getByLabelText('Note title'), 'Buy filters');
-    await user.type(screen.getByLabelText('Note body'), 'for the coffee machine');
+    // The editor is bound to the new note only after it has been committed and
+    // selected — one IndexedDB round trip behind the click. Wait for that state
+    // instead of racing it; typing earlier lands on the previous form.
+    const title = await screen.findByLabelText('Note title');
+    await user.type(title, 'Buy filters');
+    await user.type(await screen.findByLabelText('Note body'), 'for the coffee machine');
 
     // The debounced autosave lands in IndexedDB, and the list re-reads from it.
     await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Buy filters'));
@@ -79,11 +83,14 @@ describe('<App />', () => {
     const { outpost } = await renderApp();
 
     await user.click(screen.getByRole('button', { name: /new note/i }));
-    await user.type(screen.getByLabelText('Note title'), 'Typed fast');
+    const title = await screen.findByLabelText('Note title');
+    await user.type(title, 'Typed fast');
 
     // Regression guard: the editor used to reset its draft state in an effect that
-    // ran after the commit, which wiped keystrokes typed in between.
-    expect(screen.getByLabelText('Note title')).toHaveValue('Typed fast');
+    // ran after the commit, which wiped keystrokes typed in between. The assertion
+    // stays synchronous and on the same node that was typed into, so a reset that
+    // lands after the keystrokes still fails it.
+    expect(title).toHaveValue('Typed fast');
     await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Typed fast'));
   });
 
@@ -93,14 +100,15 @@ describe('<App />', () => {
 
     online.value = false;
     await user.click(screen.getByRole('button', { name: /new note/i }));
-    await user.type(screen.getByLabelText('Note title'), 'Airplane mode note');
+    const title = await screen.findByLabelText('Note title');
+    await user.type(title, 'Airplane mode note');
 
     await waitFor(() => expect(outpost.getSnapshot().notes[0]?.title).toBe('Airplane mode note'));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /offline/i })).toBeInTheDocument(),
     );
     expect(server.notes.size).toBe(0);
-    expect(screen.getByLabelText('Note title')).toHaveValue('Airplane mode note');
+    expect(title).toHaveValue('Airplane mode note');
   });
 
   it('filters the list with the search box', async () => {
