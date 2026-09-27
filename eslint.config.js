@@ -28,6 +28,10 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+      // `any` comes from `recommended`; the non-null assertion does not (it lives in
+      // `strict`), and CONTRIBUTING promises both. Enforced here so the promise is
+      // checked instead of remembered.
+      '@typescript-eslint/no-non-null-assertion': 'error',
       'no-console': 'off',
       eqeqeq: ['error', 'always'],
     },
