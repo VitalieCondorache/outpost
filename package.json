@@ -41,7 +41,6 @@
     "preview": "npm run preview -w @outpost/app",
     "icons": "node tools/generate-icons.mjs",
     "screenshot": "node tools/screenshot.mjs",
-    "probe:gif": "node tools/gif-probe.mjs",
     "size": "node tools/check-bundle-size.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

@@ -40,9 +40,9 @@ jobs:
       - name: Unit and integration tests
         run: npm test
 
-      # The repo scripts are code too: `node --test` keeps the hand-written PNG
-      # and GIF encoders honest. They are not part of `npm test` because they
-      # belong to no workspace.
+      # The repo scripts are code too: `node --test` keeps the PNG encoder behind
+      # the icons honest. They are not part of `npm test` because they belong to no
+      # workspace.
       - name: Tooling tests
         run: npm run test:tools
 

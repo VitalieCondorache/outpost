@@ -1,12 +1,11 @@
 /**
- * Minimal, dependency-free PNG encoder (8-bit RGBA, non-interlaced).
+ * Minimal PNG encoder (8-bit RGBA, non-interlaced), used by `generate-icons.mjs`.
  *
- * Shared by `generate-icons.mjs` and by the round-trip test of the GIF tool, so
- * the decoder in `gif.mjs` is verified against bytes this project produced rather
- * than against a fixture nobody can regenerate.
+ * Seventy lines of zlib plumbing instead of an image library: the icons are the
+ * only binary assets in the repository, and this way anyone with Node can
+ * regenerate them.
  */
 import { deflateSync } from 'node:zlib';
-import { inflateSync } from 'node:zlib';
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -20,7 +19,7 @@ const CRC_TABLE = (() => {
   return table;
 })();
 
-export function crc32(buffer) {
+function crc32(buffer) {
   let crc = 0xffffffff;
   for (const byte of buffer) {
     crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
@@ -70,20 +69,4 @@ export function encodePng(width, height, pixels) {
     chunk('IDAT', deflateSync(raw, { level: 9 })),
     chunk('IEND', Buffer.alloc(0)),
   ]);
-}
-
-/** Reads a PNG produced by `encodePng` (used by the tests). */
-export function inflatePng(buffer) {
-  let offset = 8;
-  const idat = [];
-
-  while (offset < buffer.length) {
-    const length = buffer.readUInt32BE(offset);
-    const type = buffer.toString('ascii', offset + 4, offset + 8);
-    if (type === 'IDAT') idat.push(buffer.subarray(offset + 8, offset + 8 + length));
-    if (type === 'IEND') break;
-    offset += 12 + length;
-  }
-
-  return inflateSync(Buffer.concat(idat));
 }

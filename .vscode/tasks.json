@@ -21,7 +21,7 @@
     },
     {
       "label": "test: tools",
-      "detail": "The repo scripts: PNG/GIF encoders",
+      "detail": "The repo scripts: the PNG encoder behind the icons",
       "type": "shell",
       "command": "npm run test:tools",
       "group": "test",
