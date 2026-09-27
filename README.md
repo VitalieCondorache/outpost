@@ -233,6 +233,7 @@ usually enough to see exactly which mutation went missing.
 | `npm run build`                             | builds the server bundle and the PWA                      |
 | `npm run e2e`                               | builds everything, then runs the Playwright offline suite |
 | `npm run icons`                             | regenerates the PNG icons (pure Node, no image library)   |
+| `npm run screenshot`                        | regenerates the README screenshots from the running app   |
 | `npm run docker:up` / `npm run docker:down` | the whole stack / plus its volume                         |
 
 ## Known limitations (honest list)
