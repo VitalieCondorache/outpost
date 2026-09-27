@@ -17,9 +17,10 @@ library.
 
 <!-- Replace `USER` with your GitHub account when you publish: this is the only
      badge that needs an owner; the rest resolve on their own. -->
+
 [![CI](https://github.com/USER/outpost/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6ee7b7.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.5-6ee7b7.svg)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D24-6ee7b7.svg)](https://nodejs.org)
 [![Native deps](https://img.shields.io/badge/native%20deps-none-6ee7b7.svg)](#tech-stack)
 
 ## Contents
@@ -62,7 +63,8 @@ The full reasoning lives in [`docs/adr`](docs/adr):
 - [ADR 003 — Delta sync with a monotonic sequence cursor](docs/adr/003-monotonic-cursor.md)
 
 The bugs behind this code — including one where every unit test was green while the
-shipped server could not even start — are written up in
+shipped server could not even start, and one where the test double told the app to
+keep a deleted note in the trash — are written up in
 [`docs/engineering-notes.md`](docs/engineering-notes.md).
 
 ## Start here: the three files that matter
@@ -111,13 +113,23 @@ those files survived.
 ## Quick start
 
 ```bash
-# Node >= 22.5 (SQLite is built into the runtime)
 npm install
 npm run dev
 ```
 
+**Node 24 is required** (CI, the Docker image and the devcontainer all run it):
+the API uses `node:sqlite`, which ships inside the runtime, so there is no native
+module to compile and no database to install.
+
 - App: <http://localhost:5173>
 - API: <http://localhost:8787/api/health>
+
+### Or with zero local setup (GitHub Codespaces)
+
+Click **Code → Codespaces → Create codespace on main**. The
+[devcontainer](.devcontainer/devcontainer.json) installs the dependencies, the
+Playwright browser and opens the app in a browser tab for you. Then run
+`npm run dev` in the terminal it gives you.
 
 ### Or with Docker (no local Node needed)
 
@@ -254,7 +266,7 @@ The API has four endpoints and no business logic beyond these rules:
 ├─ packages/shared/        the wire protocol (types only, shared by both sides)
 ├─ docs/adr/               the decisions worth arguing about
 ├─ docker/, docker-compose.yml
-└─ tools/generate-icons.mjs
+└─ tools/                  repo scripts: icons, PNG/GIF encoders, screenshots, size budget
 ```
 
 ## Tech stack
@@ -269,18 +281,23 @@ purpose: the interesting code is ours.
 
 ## Testing
 
-`npm test` runs **100 tests**:
+`npm test` runs **105 tests**:
 
-| Suite                               | What it pins down                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `server/test/sync.test.ts` (9)      | revisions, idempotent replays, conflicts, tombstones, batch order, cursor                         |
-| `server/test/validate.test.ts` (13) | the request contract, and that a rejected request writes nothing                                  |
-| `app/src/db/repo.test.ts` (17)      | transactional notes + outbox writes, coalescing, batch claiming, chain rebasing                   |
-| `app/src/sync/engine.test.ts` (11)  | offline queueing, reconnect drain, retry backoff, lost-response dedup, all three conflict choices |
-| `app/src/features/backup` (14)      | backup round-trip, file validation, import as a normal local change, restore from trash           |
-| `app/src/sync/*.test.ts` (16)       | pure logic: jitter, caps, mutation kinds, wire shape                                              |
-| `app/src/lib/search.test.ts` (10)   | search, views, sorting, tags, excerpts                                                            |
-| `app/src/App.test.tsx` (10)         | the UI wired to a real store and a real IndexedDB, plus axe on the default view and a conflict    |
+| Suite                                  | What it pins down                                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `server/test/sync.test.ts` (9)         | revisions, idempotent replays, conflicts, tombstones, batch order, cursor                         |
+| `server/test/validate.test.ts` (13)    | the request contract, and that a rejected request writes nothing                                  |
+| `app/src/db/repo.test.ts` (17)         | transactional notes + outbox writes, coalescing, batch claiming, chain rebasing                   |
+| `app/src/sync/engine.test.ts` (12)     | offline queueing, reconnect drain, retry backoff, lost-response dedup, all three conflict choices |
+| `app/src/features/backup` (14)         | backup round-trip, file validation, import as a normal local change, restore from trash           |
+| `app/src/sync/*.test.ts` (16)          | pure logic: jitter, caps, mutation kinds, wire shape                                              |
+| `app/src/lib/search.test.ts` (10)      | search, views, sorting, tags, excerpts                                                            |
+| `app/src/test/fake-server.test.ts` (4) | the rules the fake server mirrors from `server/src/db.ts`                                         |
+| `app/src/App.test.tsx` (10)            | the UI wired to a real store and a real IndexedDB, plus axe on the default view and a conflict    |
+
+`npm run test:tools` covers the repository's own scripts (`tools/lib/*.test.mjs`)
+with Node's built-in runner — those are not part of any workspace, so `npm test`
+does not see them.
 
 `npm run e2e` adds the true end-to-end pass: the **production build**, the
 **real service worker**, the **real SQLite API**, `context.setOffline(true)`, an
@@ -297,13 +314,17 @@ Everything above, in the exact order CI runs it:
 npm ci
 npm run format:check && npm run typecheck && npm run lint
 npm test
+npm run test:tools
 npm run build && npm run size
 npm run e2e
 ```
 
 Unit tests use an in-memory implementation of the protocol
 (`app/src/test/fake-server.ts`) so they stay fast and deterministic; the
-Playwright suite is what proves the fake still matches the real server.
+Playwright suite is what proves the fake still matches the real server. Its own
+tests (`app/src/test/fake-server.test.ts`) pin the rules the two share, so a
+double that drifts fails in the unit suite instead of hiding behind two e2e
+scenarios.
 
 ## Debugging the sync pipeline
 
@@ -330,6 +351,7 @@ usually enough to see exactly which mutation went missing.
 | ------------------------------------------- | --------------------------------------------------------- |
 | `npm run dev`                               | API + app with hot reload                                 |
 | `npm test`                                  | unit and integration tests for every workspace            |
+| `npm run test:tools`                        | the repo scripts' own tests (`node --test`)               |
 | `npm run typecheck`                         | strict TypeScript for app, server and shared              |
 | `npm run lint` / `npm run format`           | ESLint (flat config) / Prettier                           |
 | `npm run build`                             | builds the server bundle and the PWA                      |

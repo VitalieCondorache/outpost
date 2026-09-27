@@ -1,7 +1,8 @@
 # Engineering notes
 
-Four bugs that only appeared when the thing was actually run, and what they taught
-me. Every entry has the symptom, the evidence that found it, the cause, the fix and
+Six bugs that only appeared when the thing was actually run, and what they taught
+me — plus an interlude about a suite that was fragile for a different reason.
+Every entry has the symptom, the evidence that found it, the cause, the fix and
 the test that now prevents it.
 
 This is the part of the project I would talk about in an interview, because none of
@@ -162,11 +163,110 @@ numbers instead of in someone's head.
 
 ---
 
+## 6. The test double disagreed with the server about tombstones
+
+**Symptom.** A UI test failed about once every five full runs, always in the same
+place: `moves a note to the trash and restores it from there` →
+`AssertionError: expected 1790526667718 to be null`. The note visibly left the
+trash and then went back in. A rerun passed, so it looked like timing.
+
+**How it was found.** Retrying the test destroys the evidence, so the scenario was
+moved into a loop that ran it thirty times inside one process, recording every
+`deletedAt` the store published and dumping the local note, the outbox and the
+server state whenever it ended wrong. Eleven of the thirty runs failed, all with
+the same trace:
+
+```
+PUSH [create base=0 del=null]           -> [applied rev=1]
+PUSH [delete base=1 del=1790526855621]  -> [applied rev=2]
+PUSH [update base=2 del=null]           -> [applied rev=3]
+  local  rev=3 deletedAt=1790526855609   ← the tombstone came back
+  server rev=3 deletedAt=1790526855609
+```
+
+The restore really was pushed. The answer to it still carried a tombstone, and by
+design the client adopts what the server says is authoritative. One `grep` for the
+field on both sides named the culprit:
+
+```console
+$ grep -n 'deletedAt' app/src/test/fake-server.ts server/src/db.ts
+fake-server.ts:120:  deletedAt: payload?.deletedAt ?? existing?.deletedAt ?? null,
+db.ts:230:           const deletedAt =
+db.ts:231:             mutation.kind === 'create' || payload.deletedAt === null ? null : …
+```
+
+**Cause.** `null` is a value in this protocol — it means "restore" — and `??`
+treats it as an absent field, so the double kept a tombstone the real server
+clears. Every unit test stayed green because the wrong object was the only server
+those tests ever talked to.
+
+**Fix.** The double implements the rule instead of the shortcut:
+
+```ts
+const deletedAt =
+  mutation.kind === 'create' || payload?.deletedAt === null
+    ? null
+    : (payload?.deletedAt ?? existing?.deletedAt ?? null);
+```
+
+**Why it cannot come back.** `app/src/test/fake-server.test.ts` pins the rules the
+two implementations share (an explicit `null` clears a tombstone, silence keeps
+it, a second delete of the same note is a no-op, a stale `baseRev` is a conflict)
+and `app/src/sync/engine.test.ts` replays the exact interleaving — trash, let the
+`delete` reach the server on its own, then restore. Both fail on the old
+behaviour. Same lesson as §1, one layer up: _a double is an assertion about
+somebody else's code, so it needs its own tests._
+
+---
+
+## 7. The GIF encoder's code width grew one code too early
+
+**Symptom.** `node --test tools/lib/gif.test.mjs` failed on the one test that
+matters: the round trip in which a second, independently written decoder reads the
+encoder's own bytes back. Five of six tests passed.
+
+**How it was found.** A failing round trip proves that two implementations
+disagree, not which one is wrong, so the file went to a decoder that shares no
+code with either of them — Chromium, through a canvas. The probe bitmap (flat
+bands plus a checkerboard, chosen so that corruption cannot look like noise) came
+back **99.9% wrong pixels**, worst channel error 251 of 255. The encoder was the
+one that lied.
+
+**Cause.** GIF's LZW grows its code width as the table fills, and the two sides do
+not count at the same moment: a decoder only learns an entry when it reads the
+_next_ code, so its table is always one code behind the encoder's. Growing on
+`nextCode === 1 << codeSize` writes the first wider code while the decoder is still
+reading the old width — and every code after that is misaligned.
+
+**Fix.** Count from the decoder's side, and handle the 12-bit ceiling explicitly
+(4095 is the last legal code):
+
+```ts
+if (codeSize === 12) {
+  if (nextCode === 1 << 12) {
+    emit(clearCode);
+    resetDictionary();
+  }
+} else if (nextCode - 1 === 1 << codeSize) {
+  codeSize += 1;
+}
+```
+
+**Why it cannot come back.** Those tests now run in CI (`npm run test:tools`), so
+the encoder can no longer rot in an unreferenced file, and they were checked
+against a real decoder: the probe comes back pixel-exact in Chromium, and so does
+a 512×512, 256-colour image — the size that crosses the 12-bit ceiling and forces
+a Clear code, a path no unit test reached.
+
+---
+
 ## The pattern
 
-1. **Reproduce where it actually runs.** Four of these five were invisible to the
-   unit suite: a bundler artefact, a real socket, an event loop and a rendering
-   lifecycle.
+1. **Reproduce where it actually runs.** Four of the six were invisible to the unit
+   suite — a bundler artefact, a real socket, an event loop and a rendering
+   lifecycle. The other two were only found by asking something _outside_ the repo
+   for an opinion: a decoder that shares no code with ours, and a loop that ran the
+   flaky scenario thirty times instead of retrying it once.
 2. **Add a log that answers the question you are asking**, then delete it — or, if it
    was useful, promote it into the product.
 3. **Fix the design, not the timing.** Every wait I shortened made the _test_ pass;

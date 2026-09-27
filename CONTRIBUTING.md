@@ -9,8 +9,9 @@ npm install
 npm run dev          # API on :8787, app on :5173
 ```
 
-Node **22.5+** is required: the API uses `node:sqlite`, which is bundled with the
-runtime (no native module to compile).
+Node **24+** is required: the API uses `node:sqlite`, which is bundled with the
+runtime (no native module to compile). It is also the version CI, the Docker image
+and the devcontainer use, so anything else is untested.
 
 ## Before you open a pull request
 
@@ -19,6 +20,7 @@ npm run format:check
 npm run typecheck
 npm run lint
 npm test
+npm run test:tools
 npm run build && npm run size
 npm run e2e          # builds first; needs `npx playwright install chromium` once
 ```
@@ -33,6 +35,13 @@ CI runs exactly these steps.
   retries, conflicts, tombstones) must be covered in
   `app/src/sync/engine.test.ts` or `app/src/db/repo.test.ts`; server rules go in
   `server/test/`.
+- **The test double is an assertion about somebody else's code.**
+  `app/src/test/fake-server.ts` must keep mirroring `server/src/db.ts`; the rules
+  the two share are pinned in `app/src/test/fake-server.test.ts`. If the double
+  needs a rule the real server does not have, fix the double.
+- **Everything in `tools/` is code too.** Its tests sit next to it
+  (`tools/lib/*.test.mjs`) and run with `npm run test:tools`, because they belong
+  to no workspace and `npm test` would not see them.
 - **Comments explain _why_, not _what_.** The interesting parts of this codebase
   are decisions: read `docs/adr/` before changing the sync semantics.
 - **Commits** follow Conventional Commits (`feat:`, `fix:`, `refactor:`,
