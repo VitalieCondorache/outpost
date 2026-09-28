@@ -1,6 +1,9 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
-const API_URL = process.env.E2E_API_URL ?? 'http://127.0.0.1:8787';
+// Same knob as playwright.config.ts: the direct API assertions have to hit the
+// server the suite actually started, not the default port.
+const API_PORT = Number(process.env.E2E_API_PORT ?? 8787);
+const API_URL = process.env.E2E_API_URL ?? `http://127.0.0.1:${API_PORT}`;
 
 async function openApp(page: Page): Promise<void> {
   await page.goto('/');
