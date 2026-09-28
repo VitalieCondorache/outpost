@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---------------------------------------------------------------- build stage
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /repo
 
 # Manifests first: the dependency layer is cached until they change.
@@ -17,7 +17,7 @@ COPY server ./server
 RUN npm run build -w @outpost/server
 
 # -------------------------------------------------------------- runtime stage
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /repo
 ENV NODE_ENV=production \
     PORT=8787 \
