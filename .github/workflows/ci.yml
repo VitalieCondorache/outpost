@@ -52,7 +52,7 @@ jobs:
       - name: Bundle budget
         run: npm run size
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pwa-build
           path: app/dist
@@ -80,7 +80,7 @@ jobs:
       - name: Run the offline suite
         run: npm run e2e
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
