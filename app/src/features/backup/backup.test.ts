@@ -4,6 +4,7 @@ import { deleteOutpostDb } from '../../db/open-db';
 import { createOutpost } from '../../store/create-outpost';
 import type { Outpost } from '../../store/outpost';
 import { createFakeServer, type FakeServer } from '../../test/fake-server';
+import { settle } from '../../test/settle';
 import {
   BACKUP_VERSION,
   backupFilename,
@@ -24,18 +25,6 @@ function note(overrides: Partial<Note> = {}): Note {
     updatedAt: 1_000,
     ...overrides,
   };
-}
-
-/**
- * `syncNow()` resolves as soon as the pass in flight is done; a pass queued
- * behind it (a local change that triggered its own sync) may still be pending.
- * Draining in a loop is the deterministic way to wait for an empty outbox.
- */
-async function settle(outpost: Outpost): Promise<void> {
-  for (let pass = 0; pass < 6; pass += 1) {
-    await outpost.syncNow();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
 }
 
 describe('createBackup / serializeBackup / parseBackup', () => {

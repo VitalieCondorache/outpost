@@ -4,31 +4,12 @@ import { deleteOutpostDb } from '../db/open-db';
 import { createOutpost } from '../store/create-outpost';
 import type { Outpost } from '../store/outpost';
 import { createFakeServer, type FakeServer } from '../test/fake-server';
+import { settle, until } from '../test/settle';
 
 let server: FakeServer;
 let outpost: Outpost;
 let online: boolean;
 let dbName: string;
-
-const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Polls until the condition holds — a loaded machine must not fake a failure. */
-async function until(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (condition()) return;
-    await tick(25);
-  }
-  throw new Error('the expected state never arrived');
-}
-
-/** Drains the outbox deterministically, including passes queued behind one. */
-async function settle(): Promise<void> {
-  for (let pass = 0; pass < 6; pass += 1) {
-    await outpost.syncNow();
-    await tick();
-  }
-}
 
 function serverNote(): Note | undefined {
   return [...server.notes.values()][0];
@@ -57,7 +38,7 @@ describe('offline first', () => {
     online = false;
 
     await outpost.createNote({ title: 'Written in a tunnel' });
-    await settle();
+    await settle(outpost);
 
     const [note] = outpost.getSnapshot().notes;
     expect(note).toMatchObject({ title: 'Written in a tunnel', rev: 0 });
@@ -69,10 +50,10 @@ describe('offline first', () => {
   it('flushes the outbox as soon as the network comes back', async () => {
     online = false;
     await outpost.createNote({ title: 'Queued while offline' });
-    await settle();
+    await settle(outpost);
 
     online = true;
-    await settle();
+    await settle(outpost);
 
     expect(outpost.getSyncSnapshot()).toMatchObject({ phase: 'idle', pending: 0 });
     expect(serverNote()).toMatchObject({ title: 'Queued while offline', rev: 1 });
@@ -91,17 +72,17 @@ describe('offline first', () => {
       updatedAt: 500,
     });
 
-    await settle();
+    await settle(outpost);
 
     expect(outpost.getSnapshot().notes.map((note) => note.id)).toContain('from-other-device');
   });
 
   it('syncs a delete as a tombstone that is not resurrected by the pull', async () => {
     const note = await outpost.createNote({ title: 'Temporary' });
-    await settle();
+    await settle(outpost);
 
     await outpost.trashNote(note.id);
-    await settle();
+    await settle(outpost);
 
     expect(serverNote()?.deletedAt).not.toBeNull();
     expect(outpost.getSnapshot().notes[0]?.deletedAt).not.toBeNull();
@@ -110,18 +91,18 @@ describe('offline first', () => {
 
   it('clears a tombstone that was pushed before the note was restored', async () => {
     const note = await outpost.createNote({ title: 'Temporary' });
-    await settle();
+    await settle(outpost);
 
     // Let the *delete* reach the server on its own. The restore below is then a
     // second, chained write instead of an edit coalesced into the same mutation —
     // the interleaving in which a restore used to come back from the server still
     // carrying its tombstone, leaving the note stuck in the trash.
     await outpost.trashNote(note.id);
-    await settle();
+    await settle(outpost);
     expect(serverNote()?.deletedAt).not.toBeNull();
 
     await outpost.restoreNote(note.id);
-    await settle();
+    await settle(outpost);
 
     expect(serverNote()?.deletedAt).toBeNull();
     expect(outpost.getSnapshot().notes[0]?.deletedAt).toBeNull();
@@ -134,7 +115,7 @@ describe('failure handling', () => {
     server.failNextPush('offline?');
 
     await outpost.createNote({ title: 'Retry me' });
-    await settle();
+    await settle(outpost);
 
     expect(outpost.getSyncSnapshot()).toMatchObject({ phase: 'error', failures: 1, pending: 1 });
     const [mutation] = await outpost.pendingMutations();
@@ -153,7 +134,7 @@ describe('failure handling', () => {
     server.failNextPushAfterApply();
 
     const note = await outpost.createNote({ title: 'Only once' });
-    await settle();
+    await settle(outpost);
 
     // The client never saw the response, so it still believes it failed.
     expect(outpost.getSyncSnapshot().pending).toBe(1);
@@ -174,16 +155,16 @@ describe('conflicts', () => {
    */
   async function createConflict(): Promise<Note> {
     const note = await outpost.createNote({ title: 'Draft' });
-    await settle();
+    await settle(outpost);
 
     online = false;
     await outpost.updateNote(note.id, { title: 'My version', body: 'written offline' });
-    await settle();
+    await settle(outpost);
 
     server.externalWrite(note.id, { title: 'Their version', body: 'written elsewhere' });
 
     online = true;
-    await settle();
+    await settle(outpost);
 
     return note;
   }
@@ -252,7 +233,7 @@ describe('conflicts', () => {
     const conflict = firstConflict();
 
     await outpost.resolveConflict(conflict.mutationId, 'both');
-    await settle();
+    await settle(outpost);
 
     const notes = outpost.getSnapshot().notes;
     expect(notes).toHaveLength(2);

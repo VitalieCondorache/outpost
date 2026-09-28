@@ -39,6 +39,10 @@ CI runs exactly these steps.
   `app/src/test/fake-server.ts` must keep mirroring `server/src/db.ts`; the rules
   the two share are pinned in `app/src/test/fake-server.test.ts`. If the double
   needs a rule the real server does not have, fix the double.
+- **A drained outbox is a state, not a count of passes.** `syncNow()` awaits the
+  pass in flight and merely _queues_ one more, so a test that needs an empty
+  outbox uses `app/src/test/settle.ts` (it waits for the engine to leave
+  `syncing`) instead of counting passes or sleeping.
 - **Everything in `tools/` is code too.** Its tests sit next to it
   (`tools/lib/*.test.mjs`) and run with `npm run test:tools`, because they belong
   to no workspace and `npm test` would not see them.
